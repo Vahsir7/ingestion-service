@@ -1,0 +1,22 @@
+services:
+  # The Message Broker
+  redis:
+    image: redis:alpine
+    container_name: redis_queue
+    ports:
+      - "6379:6379"
+    # Persistence: Saves data if container restarts
+    volumes:
+      - redis_data:/data
+    networks:
+      - log_network
+
+  # We will add the Go service here later
+  # We will add the Python service here later
+
+networks:
+  log_network:
+    driver: bridge
+
+volumes:
+  redis_data:
