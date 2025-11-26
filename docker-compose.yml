@@ -1,19 +1,18 @@
+version: '3.8'
+
 services:
-  # The Message Broker
+  # 1. The Message Broker
   redis:
     image: redis:alpine
     container_name: redis_queue
     ports:
       - "6379:6379"
-    # Persistence: Saves data if container restarts
     volumes:
       - redis_data:/data
     networks:
       - log_network
 
-  # We will add the Go service here later
-  # We will add the Python service here later
-
+  # 2. The Database
   db:
     image: postgres:15-alpine
     container_name: postgres_db
@@ -28,6 +27,34 @@ services:
     networks:
       - log_network
 
+  # 3. The Ingestion API (Go)
+  ingestion:
+    build: ./ingestion-service
+    container_name: ingestion_api
+    ports:
+      - "3080:3080"
+    environment:
+      - DATABASE_URL=postgres://user:password@db:5432/logs_db?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+      - db
+    networks:
+      - log_network
+
+  # 4. The Processor (Python)
+  processor:
+    build: ./processor-service
+    container_name: ai_worker
+    environment:
+      - DATABASE_URL=postgres://user:password@db:5432/logs_db?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+      - db
+    networks:
+      - log_network
+
 networks:
   log_network:
     driver: bridge
@@ -35,4 +62,3 @@ networks:
 volumes:
   redis_data:
   postgres_data:
-  

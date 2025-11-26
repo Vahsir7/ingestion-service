@@ -1,0 +1,24 @@
+services:
+  # 1. The Go API
+  - type: web
+    name: ingestion-service
+    env: docker
+    context: ingestion-service
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+
+  # 2. The Python Worker
+  - type: worker
+    name: processor-service
+    env: docker
+    context: processor-service
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false 
+      - key: REDIS_URL
+        sync: false

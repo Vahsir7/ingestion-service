@@ -2,13 +2,15 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies for Postgres driver
+# Install build deps for Postgres driver
 RUN apt-get update && apt-get install -y libpq-dev gcc
+
+# Set env to see logs immediately (Crucial for debugging)
+ENV PYTHONUNBUFFERED=1
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# No EXPOSE needed because this is a background worker
 CMD ["python", "main.py"]
