@@ -1,72 +1,83 @@
 import redis
 import time
 import json
-import os
+import numpy as np
+from sklearn.ensemble import IsolationForest
 
 # Configuration
 STREAM_KEY = "log_stream"
 GROUP_NAME = "ai_group"
-CONSUMER_NAME = "worker_1" # In production, this would be a unique UUID (e.g., hostname)
+CONSUMER_NAME = "worker_1"
 
-# 1. Connect to Redis
-# Again, using localhost for now. In Docker, this will be "redis_queue"
+# --- THE AI BRAIN ---
+class AnomalyDetector:
+    def __init__(self):
+        self.model = IsolationForest(contamination=0.1) # 10% of data is expected to be anomalous
+        self.is_trained = False
+
+    def train(self):
+        """
+        In production, you load a .pkl file here.
+        For this demo, we train on dummy 'normal' data (Log lengths).
+        """
+        print("🧠 Training Anomaly Model...", end="")
+        
+        # We assume 'Normal' logs have a length between 10 and 50 characters.
+        # We generate 1000 random data points to teach the model "Normality".
+        X_train = np.random.normal(loc=30, scale=10, size=(1000, 1))
+        
+        self.model.fit(X_train)
+        self.is_trained = True
+        print(" Done!")
+
+    def predict(self, message):
+        """
+        Returns: -1 for Anomaly, 1 for Normal
+        """
+        # We use 'Message Length' as the feature. 
+        # In a real job, you would use TF-IDF or BERT embeddings.
+        features = np.array([[len(message)]])
+        return self.model.predict(features)[0]
+
+# --- INIT ---
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+detector = AnomalyDetector()
+detector.train() # Train immediately on startup
 
 def create_consumer_group():
-    """
-    We must create the group before we can read from it.
-    '0' means 'start from the very first message ever sent'.
-    """
     try:
         r.xgroup_create(STREAM_KEY, GROUP_NAME, id='0', mkstream=True)
-        print(f"Consumer Group '{GROUP_NAME}' created.")
-    except redis.exceptions.ResponseError as e:
-        # If group already exists, Redis throws an error. We ignore it.
-        if "BUSYGROUP" in str(e):
-            print(f"Consumer Group '{GROUP_NAME}' already exists.")
-        else:
-            raise e
+    except:
+        pass
 
 def process_log(log_id, log_data):
-    """
-    This is where the AI Magic will happen later.
-    For now, we just simulate work.
-    """
-    print(f"Processing Log {log_id}: {log_data}")
+    message = log_data.get('message', '')
+    service = log_data.get('service', 'unknown')
     
-    # Simulate AI processing time
-    # time.sleep(0.1) 
+    # AI PREDICTION
+    prediction = detector.predict(message)
+    is_anomaly = True if prediction == -1 else False
     
-    # TODO: Insert into Database here
+    status_icon = "🚨 ANOMALY DETECTED" if is_anomaly else "✅ Normal"
+    
+    print(f"[{service}] {status_icon} | Msg Len: {len(message)} | ID: {log_id}")
+
+    # TODO: Next step - Save to SQL Database
 
 def main():
-    print("Worker Interface Initiated...")
+    print("🚀 AI Worker Started...")
     create_consumer_group()
 
     while True:
         try:
-            # 2. READ from the Group
-            # xreadgroup params:
-            # - group: Who are we?
-            # - consumer: Which specific worker?
-            # - streams: {STREAM_KEY: '>'} 
-            #   The '>' symbol is MAGIC. It means "Give me new messages that NO OTHER worker has seen yet."
-            # Pass arguments in order: Group Name, Consumer Name, Streams Dict
             entries = r.xreadgroup(GROUP_NAME, CONSUMER_NAME, {STREAM_KEY: '>'}, count=1, block=2000)
-
+            
             if not entries:
-                # No new mail. Wait and try again.
                 continue
 
-            # 3. Parse the message
-            # Redis returns a nested list: [[stream_name, [[id, data], [id, data]]]]
             for stream, messages in entries:
                 for log_id, log_data in messages:
                     process_log(log_id, log_data)
-
-                    # 4. ACKNOWLEDGE (The most critical step)
-                    # We tell Redis: "I am done. You can mark this as processed."
-                    # If we don't do this, the message stays in "Pending" forever.
                     r.xack(STREAM_KEY, GROUP_NAME, log_id)
         
         except Exception as e:
