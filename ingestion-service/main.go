@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	//"fmt"
+	"fmt"
 	"log"
 	"time"
 
@@ -36,19 +36,23 @@ func main() {
 			return c.Status(400).JSON(fiber.Map{"error": "Cannot parse JSON"})
 		}
 
-		err := rdb.XAdd(ctx, &redis.XAddArgs{
-			Stream: "logs",
-			Values: map[string]interface{}{
-			"service":   entry.Service,
-			"level":     entry.Level,
-			"message":   entry.Message,
-			"timestamp": time.Now().Unix(),
-			},
-		}).Err()
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to store log entry"})
-		}
-		return c.JSON(fiber.Map{"status":"queued"})
+		id, err := rdb.XAdd(ctx, &redis.XAddArgs{
+        Stream: "log_stream",
+        Values: map[string]interface{}{
+            "service": entry.Service,
+            "level":   entry.Level,
+            "message": entry.Message,
+            "timestamp": time.Now().Unix(),
+        },
+    }).Result() // Change .Err() to .Result() to get the ID
+
+    if err != nil {
+        fmt.Println("Redis Error:", err) // Print error to terminal
+        return c.Status(500).JSON(fiber.Map{"error": "Redis unavailable"})
+    }
+
+    fmt.Println("Data Written! Redis ID:", id) // Print ID to terminal
+    return c.JSON(fiber.Map{"status": "queued", "id": id})
 	})
 
 	log.Fatal(app.Listen(":3080"))
