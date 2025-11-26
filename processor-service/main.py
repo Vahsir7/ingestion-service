@@ -2,6 +2,7 @@ import redis
 import time
 import json
 import numpy as np
+import psycopg2 
 from sklearn.ensemble import IsolationForest
 
 # Configuration
@@ -9,46 +10,68 @@ STREAM_KEY = "log_stream"
 GROUP_NAME = "ai_group"
 CONSUMER_NAME = "worker_1"
 
+# --- DATABASE CONNECTION ---
+def get_db_connection():
+    return psycopg2.connect(
+        host="localhost", # In Docker, use "postgres_db" if running python inside docker
+        database="logs_db",
+        user="user",
+        password="password",
+        port="5432"
+    )
+
 # --- THE AI BRAIN ---
 class AnomalyDetector:
     def __init__(self):
-        self.model = IsolationForest(contamination=0.1) # 10% of data is expected to be anomalous
+        self.model = IsolationForest(contamination=0.1)
         self.is_trained = False
 
     def train(self):
-        """
-        In production, you load a .pkl file here.
-        For this demo, we train on dummy 'normal' data (Log lengths).
-        """
         print("🧠 Training Anomaly Model...", end="")
-        
-        # We assume 'Normal' logs have a length between 10 and 50 characters.
-        # We generate 1000 random data points to teach the model "Normality".
         X_train = np.random.normal(loc=30, scale=10, size=(1000, 1))
-        
         self.model.fit(X_train)
         self.is_trained = True
         print(" Done!")
 
     def predict(self, message):
-        """
-        Returns: -1 for Anomaly, 1 for Normal
-        """
-        # We use 'Message Length' as the feature. 
-        # In a real job, you would use TF-IDF or BERT embeddings.
         features = np.array([[len(message)]])
         return self.model.predict(features)[0]
 
 # --- INIT ---
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 detector = AnomalyDetector()
-detector.train() # Train immediately on startup
+detector.train()
 
 def create_consumer_group():
     try:
         r.xgroup_create(STREAM_KEY, GROUP_NAME, id='0', mkstream=True)
     except:
         pass
+
+def save_log(log_id, log_data, is_anomaly):
+    """
+    Inserts the processed log into PostgreSQL
+    """
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            INSERT INTO logs (log_id, service, level, message, is_anomaly)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            log_id, 
+            log_data.get('service'), 
+            log_data.get('level'), 
+            log_data.get('message'), 
+            is_anomaly
+        ))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"❌ DB Error: {e}")
 
 def process_log(log_id, log_data):
     message = log_data.get('message', '')
@@ -58,14 +81,14 @@ def process_log(log_id, log_data):
     prediction = detector.predict(message)
     is_anomaly = True if prediction == -1 else False
     
-    status_icon = "🚨 ANOMALY DETECTED" if is_anomaly else "✅ Normal"
-    
-    print(f"[{service}] {status_icon} | Msg Len: {len(message)} | ID: {log_id}")
+    status_icon = "🚨 ANOMALY" if is_anomaly else "✅ Normal"
+    print(f"[{service}] {status_icon} | ID: {log_id} | Saved to DB")
 
-    # TODO: Next step - Save to SQL Database
+    # SAVE TO DB
+    save_log(log_id, log_data, is_anomaly)
 
 def main():
-    print("🚀 AI Worker Started...")
+    print("🚀 Full-Stack Worker Started...")
     create_consumer_group()
 
     while True:
