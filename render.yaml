@@ -13,7 +13,7 @@ services:
   
 
   # 2. The Python Worker
-  - type: worker
+  - type: web
     name: processor-service
     env: docker
     rootDir: processor-service
