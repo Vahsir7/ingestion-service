@@ -3,79 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Log Observability Platform</title>
+    <title>Sentinel | Distributed Observability</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <style>
         .animate-pulse-fast { animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .terminal-loader {
+            font-family: 'Courier New', Courier, monospace;
+        }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100 font-mono">
-    <div id="app" class="container mx-auto p-6">
+<body class="bg-gray-900 text-gray-100 font-mono h-screen overflow-hidden">
+    <div id="app" class="h-full flex flex-col">
         
-        <div class="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
-            <div>
-                <h1 class="text-3xl font-bold text-blue-500">🛡️ Sentinel <span class="text-white">Logs</span></h1>
-                <p class="text-gray-400 text-sm mt-1">Distributed Anomaly Detection Engine</p>
-            </div>
-            <div class="flex items-center gap-4">
-                <div class="text-right">
-                    <p class="text-xs text-gray-500">SYSTEM STATUS</p>
-                    <p class="text-green-400 font-bold">OPERATIONAL</p>
+        <!-- 🛑 LOADING OVERLAY (Shows only if Localhost fails & Cloud is sleeping) -->
+        <div v-if="isSystemBooting" class="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center terminal-loader">
+            <div class="w-full max-w-lg p-6">
+                <h1 class="text-4xl font-bold text-blue-500 mb-2">🛡️ Sentinel</h1>
+                <p class="text-gray-400 mb-8">Distributed Anomaly Detection Engine</p>
+                
+                <div class="space-y-4 border-l-2 border-gray-800 pl-4">
+                    <!-- Environment Check -->
+                    <div class="flex items-center gap-3">
+                        <div class="h-2 w-2 rounded-full" :class="status.env === 'checking' ? 'bg-yellow-500 animate-pulse' : 'bg-blue-500'"></div>
+                        <span class="text-sm">Environment Check (Local vs Cloud)</span>
+                        <span class="text-xs text-gray-500 ml-auto">{{ currentEnv }}</span>
+                    </div>
+
+                    <!-- Service Statuses -->
+                    <div class="flex items-center gap-3">
+                        <div class="h-2 w-2 rounded-full" :class="status.go === 'pending' ? 'bg-yellow-500 animate-pulse' : (status.go === 'ok' ? 'bg-green-500' : 'bg-red-500')"></div>
+                        <span class="text-sm">Ingestion API (Go)</span>
+                        <span class="text-xs text-gray-500 ml-auto">{{ status.go.toUpperCase() }}</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="h-2 w-2 rounded-full" :class="status.python === 'pending' ? 'bg-yellow-500 animate-pulse' : (status.python === 'ok' ? 'bg-green-500' : 'bg-red-500')"></div>
+                        <span class="text-sm">AI Processor (Python)</span>
+                        <span class="text-xs text-gray-500 ml-auto">{{ status.python.toUpperCase() }}</span>
+                    </div>
                 </div>
-                <div class="h-3 w-3 bg-green-500 rounded-full animate-pulse-fast"></div>
+
+                <p class="mt-8 text-xs text-gray-600 text-center animate-pulse">
+                    {{ statusMessage }}
+                </p>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div class="bg-gray-800 p-4 rounded border-l-4 border-blue-500">
-                <p class="text-gray-400 text-xs">TOTAL LOGS</p>
-                <p class="text-2xl font-bold">{{ logs.length }}</p>
+        <!-- 🚀 MAIN DASHBOARD -->
+        <div v-else class="container mx-auto p-6 flex-1 overflow-auto">
+            <div class="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-blue-500">🛡️ Sentinel <span class="text-white">Logs</span></h1>
+                    <div class="flex items-center gap-2 mt-1">
+                        <p class="text-gray-400 text-sm">Live Environment:</p>
+                        <span class="text-xs font-bold px-2 py-0.5 rounded" 
+                              :class="activeApi === 'LOCAL' ? 'bg-green-900 text-green-300' : 'bg-purple-900 text-purple-300'">
+                            {{ activeApi }}
+                        </span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="text-right">
+                        <p class="text-xs text-gray-500">SYSTEM STATUS</p>
+                        <p class="text-green-400 font-bold">OPERATIONAL</p>
+                    </div>
+                    <div class="h-3 w-3 bg-green-500 rounded-full animate-pulse-fast"></div>
+                </div>
             </div>
-            <div class="bg-gray-800 p-4 rounded border-l-4 border-red-500">
-                <p class="text-gray-400 text-xs">ANOMALIES DETECTED</p>
-                <p class="text-2xl font-bold text-red-400">{{ anomalyCount }}</p>
-            </div>
-            <div class="bg-gray-800 p-4 rounded border-l-4 border-green-500">
-                <p class="text-gray-400 text-xs">INGESTION RATE</p>
-                <p class="text-2xl font-bold">~ 5k/sec</p>
-            </div>
-        </div>
 
-        <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
-            <div class="p-4 bg-gray-700 flex justify-between items-center">
-                <h2 class="font-bold">Live Feed</h2>
-                <button @click="fetchLogs" class="text-xs bg-blue-600 px-3 py-1 rounded hover:bg-blue-500">Refresh</button>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div class="bg-gray-800 p-4 rounded border-l-4 border-blue-500">
+                    <p class="text-gray-400 text-xs">TOTAL LOGS</p>
+                    <p class="text-2xl font-bold">{{ logs.length }}</p>
+                </div>
+                <div class="bg-gray-800 p-4 rounded border-l-4 border-red-500">
+                    <p class="text-gray-400 text-xs">ANOMALIES DETECTED</p>
+                    <p class="text-2xl font-bold text-red-400">{{ anomalyCount }}</p>
+                </div>
+                <div class="bg-gray-800 p-4 rounded border-l-4 border-green-500">
+                    <p class="text-gray-400 text-xs">INGESTION RATE</p>
+                    <p class="text-2xl font-bold">~ 1.7k/sec</p>
+                </div>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                    <thead class="bg-gray-900 text-gray-400">
-                        <tr>
-                            <th class="p-3">Time</th>
-                            <th class="p-3">Service</th>
-                            <th class="p-3">Level</th>
-                            <th class="p-3">Message</th>
-                            <th class="p-3">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-700">
-                        <tr v-for="log in logs" :key="log.id" :class="{'bg-red-900/20': log.is_anomaly, 'hover:bg-gray-700': true}">
-                            <td class="p-3 text-gray-400">{{ formatDate(log.created_at) }}</td>
-                            <td class="p-3 font-bold text-blue-300">{{ log.service }}</td>
-                            <td class="p-3">
-                                <span :class="{'text-red-400': log.level==='error', 'text-yellow-400': log.level==='warn', 'text-green-400': log.level==='info'}">
-                                    {{ log.level.toUpperCase() }}
-                                </span>
-                            </td>
-                            <td class="p-3 text-gray-300">{{ log.message }}</td>
-                            <td class="p-3">
-                                <span v-if="log.is_anomaly" class="bg-red-500 text-white text-xs px-2 py-1 rounded-full animate-pulse">ANOMALY</span>
-                                <span v-else class="text-green-500 text-xs">Normal</span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+
+            <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                <div class="p-4 bg-gray-700 flex justify-between items-center">
+                    <h2 class="font-bold">Live Feed</h2>
+                    <button @click="fetchLogs" class="text-xs bg-blue-600 px-3 py-1 rounded hover:bg-blue-500">Refresh</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-gray-900 text-gray-400">
+                            <tr>
+                                <th class="p-3">Time</th>
+                                <th class="p-3">Service</th>
+                                <th class="p-3">Level</th>
+                                <th class="p-3">Message</th>
+                                <th class="p-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-700">
+                            <tr v-for="log in logs" :key="log.id" :class="{'bg-red-900/20': log.is_anomaly, 'hover:bg-gray-700': true}">
+                                <td class="p-3 text-gray-400">{{ formatDate(log.created_at) }}</td>
+                                <td class="p-3 font-bold text-blue-300">{{ log.service }}</td>
+                                <td class="p-3">
+                                    <span :class="{'text-red-400': log.level==='error', 'text-yellow-400': log.level==='warn', 'text-green-400': log.level==='info'}">
+                                        {{ log.level.toUpperCase() }}
+                                    </span>
+                                </td>
+                                <td class="p-3 text-gray-300">{{ log.message }}</td>
+                                <td class="p-3">
+                                    <span v-if="log.is_anomaly" class="bg-red-500 text-white text-xs px-2 py-1 rounded-full animate-pulse">ANOMALY</span>
+                                    <span v-else class="text-green-500 text-xs">Normal</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -83,32 +128,95 @@
     <script>
         const { createApp } = Vue
 
+        // CONFIGURATION
+        const LOCAL_API_URL = "http://localhost:3080"; 
+        // ⚠️ PASTE YOUR RENDER URLs HERE
+        const CLOUD_API_URL = "https://ingestion-service-xr9n.onrender.com"; 
+        const CLOUD_WORKER_URL = "https://processor-service-xr9n.onrender.com"; 
+
         createApp({
             data() {
                 return {
-                    logs: []
+                    logs: [],
+                    isSystemBooting: true,
+                    activeApi: 'DETECTING...', // 'LOCAL' or 'CLOUD'
+                    currentEnv: 'Scanning...',
+                    statusMessage: 'Initializing...',
+                    status: {
+                        env: 'checking',
+                        go: 'pending',
+                        python: 'pending',
+                    }
                 }
             },
             computed: {
                 anomalyCount() {
                     return this.logs.filter(l => l.is_anomaly).length
+                },
+                apiUrl() {
+                    return this.activeApi === 'LOCAL' ? LOCAL_API_URL : CLOUD_API_URL;
                 }
             },
             methods: {
+                async bootSystem() {
+                    // STEP 1: Check Localhost First
+                    this.statusMessage = "Pinging Localhost...";
+                    try {
+                        await fetch(`${LOCAL_API_URL}/logs`, { signal: AbortSignal.timeout(2000) });
+                        // If we get here, Localhost is UP
+                        this.activeApi = 'LOCAL';
+                        this.currentEnv = 'LOCALHOST DETECTED';
+                        this.status.env = 'ok';
+                        this.status.go = 'ok';
+                        this.status.python = 'ok'; // Assumed ok if local go is ok
+                        
+                        // Instant boot for local
+                        setTimeout(() => this.finishBoot(), 500);
+                        return;
+                    } catch (e) {
+                        console.log("Localhost unavailable, switching to Cloud...");
+                    }
+
+                    // STEP 2: Fallback to Cloud (Render)
+                    this.activeApi = 'CLOUD';
+                    this.currentEnv = 'RENDER CLOUD';
+                    this.status.env = 'ok';
+                    this.statusMessage = "Waking up free-tier instances (Approx 45s)...";
+
+                    // Start Cloud Wakeup Sequence
+                    this.wakeUpCloudServices();
+                },
+
+                async wakeUpCloudServices() {
+                    // Wake up Go API
+                    try {
+                        await fetch(`${CLOUD_API_URL}/logs`);
+                        this.status.go = 'ok';
+                    } catch (e) { this.status.go = 'error'; }
+
+                    // Wake up Python Worker
+                    try {
+                        await fetch(`${CLOUD_WORKER_URL}/`);
+                        this.status.python = 'ok';
+                    } catch (e) { this.status.python = 'error'; }
+
+                    if (this.status.go === 'ok') {
+                        this.finishBoot();
+                    }
+                },
+
+                finishBoot() {
+                    this.isSystemBooting = false;
+                    this.fetchLogs();
+                    setInterval(this.fetchLogs, 2000);
+                },
+
                 async fetchLogs() {
                     try {
-                        let res;
-                        try {
-                            res = await fetch('https://ingestion-service-xr9n.onrender.com/logs');
-                            if (!res.ok) throw new Error('Remote responded with ' + res.status);
-                        } catch (err) {
-                            console.warn('Remote fetch failed, falling back to http://localhost:3000/logs', err);
-                            res = await fetch('http://localhost:3000/logs');
-                            if (!res.ok) throw new Error('Local fetch failed: ' + res.status);
-                        }
+                        const res = await fetch(`${this.apiUrl}/logs`);
                         this.logs = await res.json();
                     } catch (e) {
-                        console.error("API Down", e);
+                        console.error("API Error", e);
                     }
                 },
                 formatDate(dateStr) {
@@ -117,9 +225,7 @@
                 }
             },
             mounted() {
-                this.fetchLogs();
-                // Auto-refresh every 2 seconds
-                setInterval(this.fetchLogs, 2000); 
+                this.bootSystem();
             }
         }).mount('#app')
     </script>
