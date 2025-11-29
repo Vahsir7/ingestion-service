@@ -18,21 +18,18 @@
 <body class="bg-gray-900 text-gray-100 font-mono h-screen overflow-hidden">
     <div id="app" class="h-full flex flex-col">
         
-        <!-- LOADING OVERLAY (Shows only if Localhost fails & Cloud is sleeping) -->
         <div v-if="isSystemBooting" class="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center terminal-loader">
             <div class="w-full max-w-lg p-6">
                 <h1 class="text-4xl font-bold text-blue-500 mb-2">Sentinel Logs Dashboard</h1>
                 <p class="text-gray-400 mb-8">Distributed Anomaly Detection Engine</p>
                 
                 <div class="space-y-4 border-l-2 border-gray-800 pl-4">
-                    <!-- Environment Check -->
                     <div class="flex items-center gap-3">
                         <div class="h-2 w-2 rounded-full" :class="status.env === 'checking' ? 'bg-yellow-500 animate-pulse' : 'bg-blue-500'"></div>
                         <span class="text-sm">Environment Check (Local vs Cloud)</span>
                         <span class="text-xs text-gray-500 ml-auto">{{ currentEnv }}</span>
                     </div>
-
-                    <!-- Service Statuses -->
+                    
                     <div class="flex items-center gap-3">
                         <div class="h-2 w-2 rounded-full" :class="status.go === 'pending' ? 'bg-yellow-500 animate-pulse' : (status.go === 'ok' ? 'bg-green-500' : 'bg-red-500')"></div>
                         <span class="text-sm">Ingestion API (Go)</span>
@@ -51,7 +48,6 @@
             </div>
         </div>
 
-        <!-- MAIN DASHBOARD -->
         <div v-else class="container mx-auto p-6 flex-1 overflow-auto">
             <div class="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
                 <div>
@@ -87,7 +83,12 @@
                     <p class="text-2xl font-bold">~ 2k/sec</p>
                 </div>
             </div>
-
+            <div class="bg-gray-800 px-4 py-3 border-b border-gray-700 text-s text-gray-400 text-center">
+                    <p>
+                        Note: This dashboard is for visualization only. To call the API, run the system locally, or stress test the application, 
+                        please visit <a href="https://github.com/Vahsir7/Sentinel" target="_blank" class="text-blue-400 hover:text-blue-300 hover:underline">GitHub</a>.
+                    </p>
+                </div>
             <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
                 <div class="p-4 bg-gray-700 flex justify-between items-center">
                     <h2 class="font-bold">Live Feed</h2>
